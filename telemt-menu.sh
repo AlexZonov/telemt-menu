@@ -330,7 +330,6 @@ services:
   telemt:
     user: "${current_user}"
     image: ghcr.io/telemt/telemt:latest
-    build: .
     restart: unless-stopped
     container_name: telemt
     ports:
