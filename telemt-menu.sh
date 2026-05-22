@@ -2,14 +2,13 @@
 
 # telemt-menu.sh - MTProto Proxy Management Interface (Telemt) via Docker Compose
 # Repository: https://github.com/AlexZonov/telemt-menu
-# Version: 1.0.0
 
 # ============================================================================
 # CONSTANTS AND VARIABLES
 # ============================================================================
 
-VERSION="1.0.0"
-SUPPORTED_TELEMT_VERSION="3.3.35"
+VERSION="1.1.0"
+SUPPORTED_TELEMT_VERSION="3.4.11"
 SCRIPT_NAME="telemt-menu"
 CONFIG_DIR="./config"
 CONFIG_FILE="${CONFIG_DIR}/config.toml"
@@ -86,6 +85,14 @@ print_step() {
 }
 
 # ============================================================================
+# DOCKER COMPOSE
+# ============================================================================
+
+docker_compose() {
+    docker compose "$@"
+}
+
+# ============================================================================
 # SYSTEM CHECKS
 # ============================================================================
 
@@ -106,8 +113,8 @@ check_docker() {
         docker_installed=true
     fi
 
-    # Check if docker-compose is available
-    if command -v docker-compose &> /dev/null; then
+    # Check if Docker Compose plugin is available
+    if [ "$docker_installed" = true ] && docker compose version &> /dev/null; then
         compose_installed=true
     fi
 
@@ -324,8 +331,6 @@ create_docker_compose() {
     local current_user="$(whoami)"
 
     cat > "$COMPOSE_FILE" << EOF
-version: '3.8'
-
 services:
   telemt:
     user: "${current_user}"
@@ -340,6 +345,8 @@ services:
     command: ["/config/config.toml"]
     volumes:
       - ./config:/config:rw
+      - ./config/cache:/config/cache:rw
+      - ./config/tlsfront:/config/tlsfront:rw
     environment:
       - RUST_LOG=info
     read_only: false
@@ -369,7 +376,11 @@ create_initial_config() {
     cat > "$CONFIG_FILE" << EOF
 # === General Settings ===
 [general]
-use_middle_proxy = false
+use_middle_proxy = true
+me_socks_kdf_policy = "compat"
+proxy_secret_path = "/config/cache/getProxySecret"
+proxy_config_v4_cache_path = "/config/cache/getProxyConfig"
+proxy_config_v6_cache_path = "/config/cache/getProxyConfigV6"
 
 [general.links]
 public_host = "${public_host}"
@@ -389,9 +400,29 @@ auth_header = ""
 enabled = true
 read_only = false
 
+[[upstreams]]
+type = "direct"
+weight = 1
+enabled = true
+
+[[upstreams]]
+type = "direct"
+scopes = "tlsfetch"
+weight = 100
+enabled = true
+
 # === Anti-Censorship & Masking ===
 [censorship]
 tls_domain = "${domain}"
+unknown_sni_action = "reject_handshake"
+mask = true
+mask_proxy_protocol = 1
+tls_emulation = true         # Fetch real cert lengths and emulate TLS records
+tls_front_dir = "/config/tlsfront"   # Cache directory for TLS emulation
+tls_fetch_scope = "tlsfetch"
+
+[dc_overrides]
+"203" = "91.105.192.100:443"
 
 [access.users]
 user1 = "${secret}"
@@ -736,7 +767,7 @@ docker_compose_up() {
     fi
 
     print_info "Starting container..."
-    docker-compose up -d
+    docker_compose up -d
 
     if [ $? -eq 0 ]; then
         print_success "Container started successfully!"
@@ -750,7 +781,7 @@ docker_compose_up() {
 
 docker_compose_down() {
     print_info "Stopping container..."
-    docker-compose down
+    docker_compose down
 
     if [ $? -eq 0 ]; then
         print_success "Container stopped successfully!"
@@ -764,14 +795,14 @@ docker_compose_restart() {
     print_info "Restarting container..."
 
     # First full stop
-    docker-compose down
+    docker_compose down
     if [ $? -ne 0 ]; then
         print_error "Failed to stop container!"
         return 1
     fi
 
     # Then full start
-    docker-compose up -d
+    docker_compose up -d
     if [ $? -eq 0 ]; then
         print_success "Container restarted successfully!"
         sleep 2
@@ -784,12 +815,12 @@ docker_compose_restart() {
 
 docker_compose_logs() {
     print_info "Showing container logs (press Ctrl+C to exit)..."
-    docker-compose logs -f telemt
+    docker_compose logs -f telemt
 }
 
 docker_compose_pull() {
     print_info "Updating image to latest version..."
-    docker-compose pull telemt
+    docker_compose pull telemt
 
     if [ $? -eq 0 ]; then
         print_success "Image updated successfully!"
@@ -803,13 +834,13 @@ docker_compose_pull() {
 show_container_status() {
     print_header "${EMOJI_STATUS} Container Status"
 
-    local status=$(docker-compose ps --format json 2>/dev/null | jq -r '.[0].Health // "N/A"' 2>/dev/null || echo "N/A")
+    local status=$(docker_compose ps --format json 2>/dev/null | jq -r '.[0].Health // "N/A"' 2>/dev/null || echo "N/A")
 
-    if docker-compose ps | grep -q "telemt"; then
+    if docker_compose ps | grep -q "telemt"; then
         print_success "Container is running!"
         echo ""
         print_info "Details:"
-        docker-compose ps
+        docker_compose ps
         echo ""
     else
         print_warning "Container is not running"
@@ -861,21 +892,34 @@ confirm() {
 # Wait for user input before returning to menu
 wait_for_enter() {
     local message="${1:-Press Enter to continue...}"
-    read -rp "$message"
+    read_interactive "$message" _
+}
+
+# Read from terminal; required when stdin is redirected (e.g. var=$(input_port))
+read_interactive() {
+    local prompt="$1"
+    local __var_name="$2"
+    if [ -t 0 ]; then
+        read -rp "$prompt" "$__var_name"
+    elif [ -r /dev/tty ]; then
+        read -rp "$prompt" "$__var_name" </dev/tty
+    else
+        read -rp "$prompt" "$__var_name"
+    fi
 }
 
 input_port() {
     local port
     while true; do
-        read -rp "Enter proxy port (1-65535): " port
+        read_interactive "Enter proxy port (1-65535): " port
 
         if ! validate_port "$port"; then
-            print_error "Invalid port format! Enter a number from 1 to 65535."
+            print_error "Invalid port format! Enter a number from 1 to 65535." >&2
             continue
         fi
 
         if is_port_in_use "$port"; then
-            print_error "Port $port is already in use! Choose another."
+            print_error "Port $port is already in use! Choose another." >&2
             continue
         fi
 
@@ -887,10 +931,10 @@ input_port() {
 input_domain() {
     local domain
     while true; do
-        read -rp "Enter masking domain (e.g., example.com): " domain
+        read_interactive "Enter masking domain (e.g., example.com): " domain
 
         if ! validate_domain "$domain"; then
-            print_error "Invalid domain format! Example: example.com"
+            print_error "Invalid domain format! Example: example.com" >&2
             continue
         fi
 
@@ -909,7 +953,7 @@ show_menu() {
 
     # Show current status
     local container_running=false
-    if docker-compose ps 2>/dev/null | grep -q "telemt"; then
+    if docker_compose ps 2>/dev/null | grep -q "telemt"; then
         container_running=true
         print_success "Container: running"
 
@@ -1303,7 +1347,7 @@ menu_view_users() {
 menu_view_logs() {
     print_header "${EMOJI_LOGS} View Logs"
 
-    if docker-compose ps 2>/dev/null | grep -q "telemt"; then
+    if docker_compose ps 2>/dev/null | grep -q "telemt"; then
         docker_compose_logs
     else
         print_warning "Container is not running!"
