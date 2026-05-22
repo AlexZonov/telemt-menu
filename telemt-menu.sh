@@ -8,7 +8,7 @@
 # ============================================================================
 
 VERSION="1.1.0"
-SUPPORTED_TELEMT_VERSION="3.4.11"
+SUPPORTED_TELEMT_VERSION="3.4.12"
 SCRIPT_NAME="telemt-menu"
 CONFIG_DIR="./config"
 CONFIG_FILE="${CONFIG_DIR}/config.toml"
@@ -376,6 +376,7 @@ create_initial_config() {
     cat > "$CONFIG_FILE" << EOF
 # === General Settings ===
 [general]
+log_level = "silent"
 use_middle_proxy = true
 me_socks_kdf_policy = "compat"
 proxy_secret_path = "/config/cache/getProxySecret"

@@ -13,7 +13,7 @@ License
 - **Automatic Backups** - Up to 10 latest configurations
 - **Beautiful Output** - Colorful interface with emojis
 - **Docker Compose** - Container starts automatically with the system
-- **Telemt Version** - Supports telemt v3.4.11 (latest officially supported)
+- **Telemt Version** - Supports telemt v3.4.12 (latest officially supported)
 
 ## Requirements
 
