@@ -13,7 +13,7 @@ License
 - **Automatic Backups** - Up to 10 latest configurations
 - **Beautiful Output** - Colorful interface with emojis
 - **Docker Compose** - Container starts automatically with the system
-- **Telemt Version** - Supports telemt v3.4.12 (latest officially supported)
+- **Telemt Version** - Supports telemt v3.4.13 (latest officially supported)
 
 ## Requirements
 
@@ -73,7 +73,7 @@ After launching the script with `sudo ./telemt-menu.sh`, you'll see the main men
   🔥 Telemt Menu - MTProto Proxy Management 🔥
 ════════════════════════════════════════
 
-Version: 1.1.0
+Version: 1.2.0
 Repository: https://github.com/AlexZonov/telemt-menu
 
 ✅ Container: running

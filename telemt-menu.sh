@@ -7,8 +7,8 @@
 # CONSTANTS AND VARIABLES
 # ============================================================================
 
-VERSION="1.1.0"
-SUPPORTED_TELEMT_VERSION="3.4.12"
+VERSION="1.2.0"
+SUPPORTED_TELEMT_VERSION="3.4.13"
 SCRIPT_NAME="telemt-menu"
 CONFIG_DIR="./config"
 CONFIG_FILE="${CONFIG_DIR}/config.toml"
@@ -360,6 +360,11 @@ services:
       nofile:
         soft: 65536
         hard: 65536
+    logging:
+      driver: json-file
+      options:
+        max-size: "50m"
+        max-file: "5"
     security_opt:
       - no-new-privileges:true
 EOF
